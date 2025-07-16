@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Leer tablas de Supabase</title>
+  <style>
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+    }
+    th {
+      background-color: #eee;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Datos de Supabase</h1>
+  
+  <label for="tableName">Nombre de la tabla:</label>
+  <input type="text" id="tableName" placeholder="Escribe el nombre de la tabla" />
+  <button onclick="fetchTable()">Cargar tabla</button>
+  
+  <div id="result"></div>
+  
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+
+    // Cambia estas variables por las de tu proyecto Supabase
+    const SUPABASE_URL = 'https://tu-proyecto.supabase.co'
+    const SUPABASE_ANON_KEY = 'tu-anon-key'
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+    async function fetchTable() {
+      const table = document.getElementById('tableName').value.trim()
+      const resultDiv = document.getElementById('result')
+      if (!table) {
+        resultDiv.innerHTML = '<p style="color:red;">Por favor, ingresa un nombre de tabla válido.</p>'
+        return
+      }
+      
+      resultDiv.innerHTML = '<p>Cargando...</p>'
+      try {
+        let { data, error } = await supabase
+          .from(table)
+          .select('*')
+          .limit(50)  // limita a 50 filas para no saturar
+        
+        if (error) throw error
+        
+        if (!data || data.length === 0) {
+          resultDiv.innerHTML = '<p>No se encontraron datos en la tabla.</p>'
+          return
+        }
+        
+        // Crear tabla HTML
+        let columns = Object.keys(data[0])
+        let html = '<table><thead><tr>'
+        columns.forEach(col => html += `<th>${col}</th>`)
+        html += '</tr></thead><tbody>'
+        
+        data.forEach(row => {
+          html += '<tr>'
+          columns.forEach(col => {
+            html += `<td>${row[col] === null ? '' : row[col]}</td>`
+          })
+          html += '</tr>'
+        })
+        
+        html += '</tbody></table>'
+        resultDiv.innerHTML = html
+      } catch (error) {
+        resultDiv.innerHTML = `<p style="color:red;">Error: ${error.message}</p>`
+      }
+    }
+  </script>
+  
+</body>
+</html>
