@@ -1,99 +1,130 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Leer tablas de Supabase</title>
+  <meta charset="UTF-8">
+  <title>Clustering Geoespacial - IA</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    input, button { margin: 5px 0; padding: 8px; width: 100%; max-width: 400px; }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      margin-top: 20px;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
-    }
-    th {
-      background-color: #eee;
-    }
-    #result p.error {
-      color: red;
-    }
+    body { margin: 0; font-family: sans-serif; }
+    h2 { text-align: center; background-color: #512da8; color: white; margin: 0; padding: 10px; }
+    #map { height: calc(100vh - 60px); }
   </style>
 </head>
 <body>
+  <h2>Visor de Clustering Geoespacial - IA</h2>
+  <div id="map"></div>
 
-  <h1>Leer tablas de Supabase</h1>
-  
-  <label for="supabaseUrl">Supabase URL:</label><br/>
-  <input type="text" id="supabaseUrl" placeholder="https://tu-proyecto.supabase.co" />
-  
-  <label for="supabaseKey">Supabase API Key (anon/public):</label><br/>
-  <input type="text" id="supabaseKey" placeholder="Tu API Key" />
-  
-  <label for="tableName">Nombre de la tabla:</label><br/>
-  <input type="text" id="tableName" placeholder="Nombre de la tabla" />
-  
-  <button onclick="fetchTable()">Cargar tabla</button>
-  
-  <div id="result"></div>
-  
-  <script type="module">
-    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <!-- Supabase JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <!-- kmeans-js -->
+  <script src="https://cdn.jsdelivr.net/npm/ml5@0.12.2/dist/ml5.min.js"></script>
 
-    async function fetchTable() {
-      const SUPABASE_URL = document.getElementById('supabaseUrl').value.trim()
-      const SUPABASE_ANON_KEY = document.getElementById('supabaseKey').value.trim()
-      const table = document.getElementById('tableName').value.trim()
-      const resultDiv = document.getElementById('result')
-      
-      if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !table) {
-        resultDiv.innerHTML = '<p class="error">Por favor, completa todos los campos.</p>'
-        return
+  <script>
+    const map = L.map('map').setView([-1.8, -78.6], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    const supabaseUrl = 'https://nytzdjxdmpmnzcrdmzit.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55dHpkanhkbXBtbnpjcmRteml0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI2Mjc5MDgsImV4cCI6MjA2ODIwMzkwOH0.altu2BeaHT6dTQ60GeuGwkSwrShYEvouY1lPMWcVy0o';
+    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
+    async function cargarYVisualizar() {
+      const { data, error } = await supabase.from('reportes').select('*');
+      if (error) {
+        alert('Error cargando datos');
+        console.error(error);
+        return;
       }
-      
-      resultDiv.innerHTML = '<p>Cargando...</p>'
-      
-      try {
-        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-        
-        let { data, error } = await supabase
-          .from(table)
-          .select('*')
-          .limit(50)
-          
-        if (error) throw error
-        
-        if (!data || data.length === 0) {
-          resultDiv.innerHTML = '<p>No se encontraron datos en la tabla.</p>'
-          return
+
+      const colors = ['#e53935', '#43a047', '#1e88e5', '#fdd835', '#8e24aa'];
+      const coords = [];
+
+      // Recolectamos coordenadas
+      data.forEach((item, index) => {
+        if (item.latitud && item.longitud) {
+          coords.push([item.longitud, item.latitud, index]);
         }
-        
-        // Construir tabla HTML
-        let columns = Object.keys(data[0])
-        let html = '<table><thead><tr>'
-        columns.forEach(col => html += `<th>${col}</th>`)
-        html += '</tr></thead><tbody>'
-        
-        data.forEach(row => {
-          html += '<tr>'
-          columns.forEach(col => {
-            html += `<td>${row[col] === null ? '' : row[col]}</td>`
-          })
-          html += '</tr>'
-        })
-        
-        html += '</tbody></table>'
-        resultDiv.innerHTML = html
-        
-      } catch (error) {
-        resultDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`
+      });
+
+      // K-means manual (simplificado)
+      function simpleKMeans(data, k) {
+        const centroids = data.slice(0, k).map(d => [d[0], d[1]]);
+        let changed = true;
+        let iterations = 0;
+        const maxIterations = 20;
+        let clusters = Array(data.length).fill(0);
+
+        while (changed && iterations < maxIterations) {
+          changed = false;
+          iterations++;
+
+          // Asignación
+          data.forEach((d, i) => {
+            let minDist = Infinity;
+            let closest = 0;
+            centroids.forEach((c, j) => {
+              const dist = Math.pow(d[0] - c[0], 2) + Math.pow(d[1] - c[1], 2);
+              if (dist < minDist) {
+                minDist = dist;
+                closest = j;
+              }
+            });
+            if (clusters[i] !== closest) {
+              changed = true;
+              clusters[i] = closest;
+            }
+          });
+
+          // Recalculo de centroides
+          const sums = Array(k).fill(null).map(() => [0, 0, 0]);
+          const counts = Array(k).fill(0);
+
+          data.forEach((d, i) => {
+            const cluster = clusters[i];
+            sums[cluster][0] += d[0];
+            sums[cluster][1] += d[1];
+            counts[cluster]++;
+          });
+
+          centroids.forEach((_, i) => {
+            if (counts[i] > 0) {
+              centroids[i][0] = sums[i][0] / counts[i];
+              centroids[i][1] = sums[i][1] / counts[i];
+            }
+          });
+        }
+
+        return clusters;
       }
+
+      const k = 3;
+      const clusterLabels = simpleKMeans(coords, k);
+
+      // Mostrar en el mapa
+      coords.forEach(([lon, lat, index], i) => {
+        const color = colors[clusterLabels[i] % colors.length];
+        const marker = L.circleMarker([lat, lon], {
+          radius: 8,
+          color: color,
+          fillColor: color,
+          fillOpacity: 0.7
+        }).addTo(map);
+
+        const p = data[index];
+        marker.bindPopup(
+          `<strong>${p.nombre}</strong><br>${p.tipo_problema}<br>${p.observaciones}`
+        );
+      });
     }
+
+    cargarYVisualizar();
   </script>
-  
 </body>
 </html>
